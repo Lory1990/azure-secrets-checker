@@ -42,8 +42,8 @@ jobs:
     
     - name: 🚀 Build and Push Docker Image
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/azure-credential-checker:latest -f Dockerfile .
-        docker tag ${{ secrets.DOCKER_USERNAME }}/azure-credential-checker:latest ${{ secrets.DOCKER_USERNAME }}/azure-credential-checker:${{ github.sha }}
-        docker push ${{ secrets.DOCKER_USERNAME }}/azure-credential-checker:latest
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/azure-credentials-checker:latest -f Dockerfile .
+        docker tag ${{ secrets.DOCKER_USERNAME }}/azure-credentials-checker:latest ${{ secrets.DOCKER_USERNAME }}/azure-credentials-checker:${{ github.sha }}
+        docker push ${{ secrets.DOCKER_USERNAME }}/azure-credentials-checker:latest
 
         
