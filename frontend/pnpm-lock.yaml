@@ -184,7 +184,7 @@ importers:
         specifier: ^5.2.0
         version: 5.2.0(eslint@9.36.0(jiti@1.21.7))
       eslint-plugin-react-refresh:
-        specifier: ^0.4.20
+        specifier: ^0.4.21
         version: 0.4.21(eslint@9.36.0(jiti@1.21.7))
       globals:
         specifier: ^15.15.0
