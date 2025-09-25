@@ -30,6 +30,7 @@ function copyFile(src, dest) {
 function postBuild() {
     console.log("Runing Postbuild script")
     copyFile(path.join(__dirname, "pnpm-lock.yaml"), path.join(__dirname, "dist", "pnpm-lock.yaml"))
+    copyFile(path.join(__dirname, "package.json"), path.join(__dirname, "dist", "package.json"))
     copyDirectory(path.join(__dirname, "src", "templates"), path.join(__dirname, "dist", "src/templates"))
     console.log("Postbuild script done")
 }
