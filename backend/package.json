@@ -17,7 +17,7 @@
     "axios": "^1.6.2",
     "dayjs": "^1.11.10",
     "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.7",
+    "nodemailer": "^7.0.6",
     "@azure/communication-email": "^1.0.0",
     "dotenv": "^16.3.1"
   },
