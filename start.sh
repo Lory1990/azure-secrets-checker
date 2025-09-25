@@ -2,7 +2,7 @@
 
 # Start the backend in the background
 cd /var/www/backend
-node . & 
+node ./src & 
 
 # Start Nginx in the foreground
 exec nginx -g 'daemon off;'
