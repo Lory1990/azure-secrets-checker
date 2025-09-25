@@ -1,0 +1,58 @@
+doctype html
+html
+  head
+    meta(charset='utf-8')
+    title Azure Secrets Expiration Alert
+    style.
+      body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+      .header { background-color: #0078d4; color: white; padding: 20px; border-radius: 5px; }
+      .summary { background-color: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
+      .app-block { margin: 20px 0; padding: 15px; border: 1px solid #e0e0e0; border-radius: 5px; }
+      .app-title { font-size: 18px; font-weight: bold; color: #0078d4; margin-bottom: 10px; }
+      .secret-item { margin: 10px 0; padding: 10px; background-color: #f8f9fa; border-radius: 3px; }
+      .expired { background-color: #fff5f5; border-left: 4px solid #dc3545; }
+      .warning { background-color: #fff8e1; border-left: 4px solid #ffc107; }
+      .footer { margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666; }
+  body
+    .header
+      h1 🔐 Azure Secrets Expiration Alert
+      p Generated on: #{now}
+
+    .summary
+      h2 Summary
+      ul
+        li
+          strong Total Applications:
+          | #{totalApps}
+        li
+          strong Applications with Expired Secrets:
+          | #{expiredApps}
+        li
+          strong Applications with Expiring Soon:
+          | #{totalApps - expiredApps}
+
+    each notification in notifications
+      .app-block
+        .app-title= notification.appName
+        p
+          strong App ID:
+          | #{notification.appId}
+
+        each secret in notification.secrets
+          - const cssClass = secret.isExpired ? 'expired' : 'warning'
+          - const status = secret.isExpired ? '⚠️ EXPIRED' : `⏰ Expires in ${secret.daysUntilExpiration} days`
+          - const displayName = secret.displayName || 'Unnamed'
+          - const expirationDate = new Date(secret.endDateTime).toLocaleString()
+
+          div(class=`secret-item ${cssClass}`)
+            strong= status
+            br
+            | Type: #{secret.type.toUpperCase()}
+            br
+            | Name: #{displayName}
+            br
+            | Expiration: #{expirationDate}
+
+    .footer
+      p This is an automated notification from Azure Secrets Checker.
+      p Please take immediate action to renew expired secrets and plan for upcoming expirations.

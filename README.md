@@ -35,7 +35,6 @@ CLIENT_ID=your-azure-client-id
 CLIENT_SECRET=your-azure-client-secret
 
 # Mail Configuration
-MAIL_PROVIDER=SMTP                    # or ACS
 MAIL_TO=admin@company.com
 MAIL_FROM=noreply@company.com
 
@@ -46,7 +45,8 @@ SMTP_USER=your-smtp-username
 SMTP_PASS=your-smtp-password
 
 # Azure Communication Services (required if MAIL_PROVIDER=ACS)
-ACS_CONNECTION_STRING=endpoint=https://your-acs-resource.communication.azure.com/;accesskey=your-access-key
+ACS_KEY=your-acs-key
+ACS_ENDPOINT=endpoint=https://your-acs-resource.communication.azure.com/
 
 # Server Configuration
 PORT=3000

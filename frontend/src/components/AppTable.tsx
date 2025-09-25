@@ -1,35 +1,53 @@
 import { useState, useMemo } from 'react';
-import { Search, Calendar, Clock, Key, Loader2 } from 'lucide-react';
+import { Search, Calendar, Clock, Key, Loader2, Eye, Globe, Server, Smartphone } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useApplications } from '@/api';
-import type { Application, ApplicationWithStatus } from '@/types';
+import type { ApplicationWithStatus } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import useApplicationsApi, { IApplication } from '@/hooks/apiClients/useApplicationsApi';
+import ApiDataFetcher from './ApiDataFetcher/ApiDataFetcher';
+import AppDetailsModal from './AppDetailsModal';
 
 const AppTable = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const { data: applications, isLoading, error } = useApplications();
+  const [selectedApp, setSelectedApp] = useState<ApplicationWithStatus | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
+  const { getAll } = useApplicationsApi()
+  const applicationsQuery = useQuery({
+      queryKey: ['applications'],
+      queryFn: async ()=>{
+        return (await getAll()).filter(app=>app?.certificates?.length>0 || app?.secrets?.length>0)
+      },
+    });
+
+    const { data: applications } = applicationsQuery
   // Calculate status and days remaining for each application
   const applicationsWithStatus = useMemo((): ApplicationWithStatus[] => {
     if (!applications) return [];
 
-    return applications.map((app: Application) => {
+    return applications.map((app: IApplication) => {
       // Find the credential with the nearest expiration date
       const now = new Date();
       let nearestExpiration = '';
       let minDaysRemaining = Infinity;
 
-      app.credentials.forEach(credential => {
-        const expirationDate = new Date(credential.expiresAt);
-        const daysRemaining = Math.ceil((expirationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        
-        if (daysRemaining < minDaysRemaining) {
-          minDaysRemaining = daysRemaining;
-          nearestExpiration = credential.expiresAt;
+      app.certificates.forEach(certificate =>{
+        if(certificate.daysUntilExpiration < minDaysRemaining){
+          minDaysRemaining = certificate.daysUntilExpiration;
+          nearestExpiration = certificate.endDateTime;
         }
-      });
+      })
+
+      app.secrets.forEach(secret => {
+        if(secret.daysUntilExpiration < minDaysRemaining){
+          minDaysRemaining = secret.daysUntilExpiration;
+          nearestExpiration = secret.endDateTime;
+        }
+      })
 
       let status: 'valid' | 'expiring' | 'expired' = 'valid';
       if (minDaysRemaining < 0) {
@@ -44,20 +62,16 @@ const AppTable = () => {
         daysRemaining: minDaysRemaining,
         nearestExpiration
       };
-    });
+    }).sort((a, b) => a.daysRemaining - b.daysRemaining);
   }, [applications]);
 
   // Filter applications based on search term
-  const filteredApplications = useMemo(() => {
+  const filteredApplications : ApplicationWithStatus[] = useMemo(() => {
     if (!searchTerm.trim()) return applicationsWithStatus;
 
     const term = searchTerm.toLowerCase();
     return applicationsWithStatus.filter(app => 
-      app.name.toLowerCase().includes(term) ||
-      app.credentials.some(cred => 
-        cred.name.toLowerCase().includes(term) ||
-        cred.keyId.toLowerCase().includes(term)
-      )
+      app.displayName.toLowerCase().includes(term) || app.appId.toLowerCase().includes(term) || app.id.toLowerCase().includes(term)
     );
   }, [applicationsWithStatus, searchTerm]);
 
@@ -95,109 +109,19 @@ const AppTable = () => {
     });
   };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <div className="flex items-center space-x-2 text-muted-foreground">
-            <Loader2 className="w-6 h-6 animate-spin" />
-            <span>Loading applications...</span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const handleViewDetails = (app: ApplicationWithStatus) => {
+    setSelectedApp(app);
+    setIsModalOpen(true);
+  };
 
-  if (error) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="text-danger text-lg font-semibold mb-2">Error Loading Applications</div>
-            <div className="text-muted-foreground">
-              {error instanceof Error ? error.message : 'An unexpected error occurred'}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedApp(null);
+  };
 
   return (
+    <ApiDataFetcher queries={[applicationsQuery]}>
     <div className="space-y-6">
-      {/* Search Bar */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Key className="w-5 h-5" />
-            Application Credentials
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search applications or secrets..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Applications Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Application</TableHead>
-                  <TableHead>App ID</TableHead>
-                  <TableHead>Secret / Key ID</TableHead>
-                  <TableHead>Expiration Date</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredApplications.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                      {searchTerm ? 'No applications match your search' : 'No applications found'}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredApplications.map((app) => (
-                    <TableRow key={app.id} className="hover:bg-muted/50 transition-colors">
-                      <TableCell className="font-medium">{app.name}</TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground">{app.id}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {app.credentials.map((cred) => (
-                            <div key={cred.id} className="font-mono text-sm">
-                              <div className="font-medium">{cred.name}</div>
-                              <div className="text-muted-foreground text-xs">{cred.keyId}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {formatDate(app.nearestExpiration)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(app.status, app.daysRemaining)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -241,7 +165,91 @@ const AppTable = () => {
           </CardContent>
         </Card>
       </div>
+      {/* Search Bar */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="w-5 h-5" />
+            Application Credentials
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Search applications or secrets..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      
+
+      {/* Applications Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Application</TableHead>
+                  <TableHead>App ID</TableHead>
+                  <TableHead>Expiration Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredApplications.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      {searchTerm ? 'No applications match your search' : 'No applications found'}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredApplications.map((app) => (
+                    <TableRow key={app.id} className="hover:bg-muted/50 transition-colors">
+                      <TableCell className="font-medium">{app.displayName}</TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">{app.id}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {formatDate(app.nearestExpiration)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(app.status, app.daysRemaining)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewDetails(app)}
+                          className="flex items-center gap-1"
+                        >
+                          <Eye className="w-4 h-4" />
+                          Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* App Details Modal */}
+      <AppDetailsModal
+        application={selectedApp}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+      />
     </div>
+    </ApiDataFetcher>
   );
 };
 

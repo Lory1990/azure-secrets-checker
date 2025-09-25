@@ -9,7 +9,8 @@ import {
   CertificateInfo,
   PasswordCredential,
   KeyCredential
-} from './types.js';
+} from '../types/types.js';
+import { fastify } from '../index';
 
 export class AzureService {
   private tenantId: string;
@@ -51,8 +52,8 @@ export class AzureService {
       this.tokenExpiry = new Date(Date.now() + (response.data.expires_in * 1000) - 60000);
 
       return this.accessToken;
-    } catch (error) {
-      console.error('Failed to get Azure access token:', error);
+    } catch (error : any) {
+      fastify.log.error('Failed to get Azure access token:', error);
       throw new Error('Failed to authenticate with Azure');
     }
   }
@@ -69,8 +70,8 @@ export class AzureService {
       });
 
       return response.data;
-    } catch (error) {
-      console.error(`Failed to make Graph API request to ${url}:`, error);
+    } catch (error : any) {
+      fastify.log.error(`Failed to make Graph API request to ${url}:`, error);
       throw new Error(`Graph API request failed: ${url}`);
     }
   }
@@ -80,7 +81,7 @@ export class AzureService {
     let nextUrl: string | null = url;
 
     while (nextUrl) {
-      const response = await this.makeGraphRequest<any>(nextUrl);
+      const response : any = await this.makeGraphRequest<any>(nextUrl);
       results = results.concat(response[valueKey] || []);
       nextUrl = response['@odata.nextLink'] || null;
     }
@@ -135,32 +136,35 @@ export class AzureService {
   }
 
   async getAllApplicationsWithSecrets(): Promise<ApplicationWithSecrets[]> {
-    console.log('Fetching service principals and applications...');
+    fastify.log.info('Fetching service principals and applications...');
 
-    const [servicePrincipals, applications] = await Promise.all([
+    /*const [servicePrincipals, applications] = await Promise.all([
       this.getServicePrincipals(),
       this.getApplications()
     ]);
 
-    console.log(`Found ${servicePrincipals.length} service principals and ${applications.length} applications`);
+    fastify.log.info(`Found ${servicePrincipals.length} service principals and ${applications.length} applications`);*/
 
     const appMap = new Map<string, ApplicationWithSecrets>();
 
-    servicePrincipals.forEach(sp => {
+    /*servicePrincipals.forEach(sp => {
       if (!appMap.has(sp.appId)) {
         appMap.set(sp.appId, {
           id: sp.id,
           appId: sp.appId,
           displayName: sp.displayName,
           secrets: [],
-          certificates: []
+          certificates: [],
+          type: 'servicePrincipal'
         });
       }
 
       const app = appMap.get(sp.appId)!;
       app.secrets.push(...this.processPasswordCredentials(sp.passwordCredentials, 'servicePrincipal'));
       app.certificates.push(...this.processKeyCredentials(sp.keyCredentials, 'servicePrincipal'));
-    });
+    });*/
+
+    const applications = await this.getApplications();
 
     applications.forEach(app => {
       if (!appMap.has(app.appId)) {
@@ -169,7 +173,8 @@ export class AzureService {
           appId: app.appId,
           displayName: app.displayName,
           secrets: [],
-          certificates: []
+          certificates: [],
+          type: 'application'
         });
       }
 
@@ -179,22 +184,24 @@ export class AzureService {
     });
 
     const result = Array.from(appMap.values());
-    console.log(`Processed ${result.length} unique applications`);
+    fastify.log.info(`Processed ${result.length} unique applications`);
 
     return result;
   }
 
-  async getApplicationsExpiringInDays(days: number[]): Promise<ApplicationWithSecrets[]> {
+  async getApplicationsExpiringInDays(days: number[], expiredDays: number = -5): Promise<ApplicationWithSecrets[]> {
     const allApps = await this.getAllApplicationsWithSecrets();
 
     return allApps.filter(app => {
-      const expiringSoonSecrets = app.secrets.filter(secret =>
-        days.includes(secret.daysUntilExpiration) || secret.isExpired
-      );
+      const expiringSoonSecrets = app.secrets.filter(secret =>{
+        if(secret.isExpired && secret.daysUntilExpiration < expiredDays) return false;
+        return days.includes(secret.daysUntilExpiration) || secret.isExpired
+    });
 
-      const expiringSoonCerts = app.certificates.filter(cert =>
-        days.includes(cert.daysUntilExpiration) || cert.isExpired
-      );
+      const expiringSoonCerts = app.certificates.filter(cert =>{
+        if(cert.isExpired && cert.daysUntilExpiration < expiredDays) return false;
+        return days.includes(cert.daysUntilExpiration) || cert.isExpired
+      });
 
       return expiringSoonSecrets.length > 0 || expiringSoonCerts.length > 0;
     }).map(app => ({

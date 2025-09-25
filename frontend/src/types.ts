@@ -1,3 +1,5 @@
+import { IApplication } from "./hooks/apiClients/useApplicationsApi";
+
 export interface Credential {
   id: string;
   name: string;
@@ -6,13 +8,7 @@ export interface Credential {
   applicationId: string;
 }
 
-export interface Application {
-  id: string;
-  name: string;
-  credentials: Credential[];
-}
-
-export interface ApplicationWithStatus extends Application {
+export interface ApplicationWithStatus extends IApplication {
   status: 'valid' | 'expiring' | 'expired';
   daysRemaining: number;
   nearestExpiration: string;

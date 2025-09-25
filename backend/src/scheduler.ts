@@ -1,7 +1,8 @@
 import * as cron from 'node-cron';
-import { AzureService } from './azureService.js';
-import { MailService } from './mailService.js';
-import { ExpirationNotification, NotificationThreshold } from './types.js';
+import { AzureService } from './services/azureService';
+import { MailService } from './services/mailService';
+import { ExpirationNotification, NotificationThreshold } from './types/types';
+import { fastify } from '.';
 
 export class Scheduler {
   private azureService: AzureService;
@@ -14,7 +15,7 @@ export class Scheduler {
   }
 
   private async checkSecretExpirations(): Promise<void> {
-    console.log('Starting scheduled secret expiration check...');
+    fastify.log.info('Starting scheduled secret expiration check...');
 
     try {
       const appsWithExpiringSoon = await this.azureService.getApplicationsExpiringInDays(
@@ -22,11 +23,11 @@ export class Scheduler {
       );
 
       if (appsWithExpiringSoon.length === 0) {
-        console.log('No applications with expiring or expired secrets found');
+        fastify.log.info('No applications with expiring or expired secrets found');
         return;
       }
 
-      console.log(`Found ${appsWithExpiringSoon.length} applications with expiring or expired secrets`);
+      fastify.log.info(`Found ${appsWithExpiringSoon.length} applications with expiring or expired secrets`);
 
       const notifications: ExpirationNotification[] = appsWithExpiringSoon.map(app => ({
         appName: app.displayName,
@@ -51,7 +52,7 @@ export class Scheduler {
 
       if (notifications.length > 0) {
         await this.mailService.sendNotification(notifications);
-        console.log(`Sent notification email for ${notifications.length} applications`);
+        fastify.log.info(`Sent notification email for ${notifications.length} applications`);
 
         const expiredCount = notifications.filter(n =>
           n.secrets.some(s => s.isExpired)
@@ -59,59 +60,54 @@ export class Scheduler {
 
         const expiringSoonCount = notifications.length - expiredCount;
 
-        console.log(`Summary: ${expiredCount} apps with expired secrets, ${expiringSoonCount} apps with secrets expiring soon`);
+        fastify.log.info(`Summary: ${expiredCount} apps with expired secrets, ${expiringSoonCount} apps with secrets expiring soon`);
       }
 
-    } catch (error) {
-      console.error('Error during scheduled secret expiration check:', error);
+    } catch (error : any) {
+      fastify.log.error('Error during scheduled secret expiration check:', error);
     }
   }
 
   async runImmediateCheck(): Promise<void> {
-    console.log('Running immediate secret expiration check...');
+    fastify.log.info('Running immediate secret expiration check...');
     await this.checkSecretExpirations();
   }
 
   startScheduler(): void {
-    console.log('Starting secret expiration scheduler...');
-    console.log('Scheduled to run daily at 09:00 AM');
-
     cron.schedule('0 9 * * *', async () => {
       await this.checkSecretExpirations();
     }, {
       timezone: 'Europe/Rome'
     });
-
-    console.log('Scheduler started successfully');
   }
 
   async testServices(): Promise<void> {
-    console.log('Testing Azure and Mail services...');
+    fastify.log.info('Testing Azure and Mail services...');
 
     try {
-      console.log('Testing Azure Graph API connection...');
+      fastify.log.info('Testing Azure Graph API connection...');
       const testApps = await this.azureService.getAllApplicationsWithSecrets();
-      console.log(`✅ Azure service working - found ${testApps.length} applications`);
+      fastify.log.info(`✅ Azure service working - found ${testApps.length} applications`);
 
-      console.log('Testing mail service connection...');
+      fastify.log.info('Testing mail service connection...');
       const mailTestResult = await this.mailService.testConnection();
       if (mailTestResult) {
-        console.log('✅ Mail service connection successful');
+        fastify.log.info('✅ Mail service connection successful');
       } else {
-        console.log('❌ Mail service connection failed');
+        fastify.log.info('❌ Mail service connection failed');
       }
 
-    } catch (error) {
-      console.error('❌ Service test failed:', error);
+    } catch (error : any) {
+      fastify.log.error('❌ Service test failed:', error);
       throw error;
     }
   }
 
   stopScheduler(): void {
-    console.log('Stopping all scheduled tasks...');
+    fastify.log.info('Stopping all scheduled tasks...');
     cron.getTasks().forEach((task, name) => {
-      task.destroy();
-      console.log(`Stopped task: ${name}`);
+      task.stop();
+      fastify.log.info(`Stopped task: ${name}`);
     });
   }
 }

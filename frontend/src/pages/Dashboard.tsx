@@ -15,10 +15,6 @@ const Dashboard = () => {
                 <p className="text-sm text-muted-foreground">Monitor and manage application secrets</p>
               </div>
             </div>
-            <div className="ml-auto flex items-center space-x-2 text-sm text-muted-foreground">
-              <TrendingUp className="w-4 h-4" />
-              <span>Real-time monitoring</span>
-            </div>
           </div>
         </div>
       </header>

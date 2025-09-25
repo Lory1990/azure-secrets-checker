@@ -4,27 +4,44 @@
   "description": "Monitor Azure Enterprise Applications secrets and certificates expiration",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/app.js",
-    "dev": "tsc && node dist/app.js",
-    "watch": "tsc -w"
+    "start": "nodemon ./src/index.ts",
+    "st": "ts-node ./src/index.ts",
+    "dev": "pnpm run start",
+    "build": "tsc && node ./postbuild.js",
+    "lint": "eslint .",
+    "prettier": "prettier --write ."
   },
-  "keywords": ["azure", "secrets", "monitoring", "fastify"],
+  "keywords": [
+    "azure",
+    "secrets",
+    "monitoring",
+    "fastify"
+  ],
   "author": "Lorenzo De Francesco",
   "license": "MIT",
+  "packageManager": "pnpm@10.7.0",
   "dependencies": {
-    "fastify": "^4.24.3",
+    "@azure/communication-email": "^1.0.0",
+    "@azure/identity": "^4.12.0",
+    "@fastify/autoload": "^6.3.1",
+    "@fastify/env": "^5.0.2",
+    "@types/pug": "^2.0.10",
     "axios": "^1.6.2",
     "dayjs": "^1.11.10",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.24.3",
+    "fastify-plugin": "^5.0.1",
+    "identityù": "link:@azure/identityù",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.7",
-    "@azure/communication-email": "^1.0.0",
-    "dotenv": "^16.3.1"
+    "nodemon": "^3.1.10",
+    "pug": "^3.0.3",
+    "ts-node": "^10.9.2"
   },
   "devDependencies": {
     "@types/node": "^20.8.7",
-    "@types/nodemailer": "^6.4.14",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^6.4.14",
     "typescript": "^5.2.2"
   }
 }

@@ -1,14 +1,18 @@
 import nodemailer from 'nodemailer';
-import { EmailClient } from '@azure/communication-email';
-import { MailConfig, ExpirationNotification } from './types.js';
+import { EmailClient, EmailMessage } from '@azure/communication-email';
+import { ClientSecretCredential } from '@azure/identity';
+import pug from 'pug';
+import path from 'path';
+import { MailConfig, ExpirationNotification } from '../types/types';
+import { fastify } from '../index';
 
 export class MailService {
   private config: MailConfig;
   private smtpTransporter?: nodemailer.Transporter;
   private acsClient?: EmailClient;
+  private templatePath: string;
 
   constructor() {
-    const provider = process.env.MAIL_PROVIDER as 'SMTP' | 'ACS' || 'SMTP';
     const to = process.env.MAIL_TO!;
     const from = process.env.MAIL_FROM!;
 
@@ -17,44 +21,40 @@ export class MailService {
     }
 
     this.config = {
-      provider,
       to,
-      from
+      from,
     };
 
-    if (provider === 'SMTP') {
+    this.templatePath = path.join(__dirname, '../templates/email-notification.pug');
+
+    if (process.env.SMTP_HOST) {
       const host = process.env.SMTP_HOST!;
       const port = parseInt(process.env.SMTP_PORT || '587');
-      const user = process.env.SMTP_USER!;
-      const pass = process.env.SMTP_PASS!;
+      const user = process.env.SMTP_USERNAME!;
+      const pass = process.env.SMTP_PASSWORD!;
+      const secure = process.env.SMTP_SECURE === 'true';
 
       if (!host || !user || !pass) {
         throw new Error('Missing required SMTP configuration: SMTP_HOST, SMTP_USER, SMTP_PASS');
       }
 
-      this.config.smtp = { host, port, user, pass };
+      this.config.smtp = { host, port, user, pass, secure };
       this.initSMTP();
-    } else if (provider === 'ACS') {
-      const connectionString = process.env.ACS_CONNECTION_STRING!;
-
-      if (!connectionString) {
-        throw new Error('Missing required ACS configuration: ACS_CONNECTION_STRING');
-      }
-
-      this.config.acs = { connectionString };
+    } else if (process.env.ACS_ENDPOINT) {
+      this.config.acs = { endpoint: process.env.ACS_ENDPOINT, key: process.env.ACS_KEY };
       this.initACS();
     } else {
-      throw new Error('Invalid MAIL_PROVIDER. Must be either SMTP or ACS');
+      throw new Error('Invalid MAIL_PROVIDER. Must specify either SMTP_HOST or ACS_ENDPOINT');
     }
   }
 
   private initSMTP(): void {
     if (!this.config.smtp) return;
 
-    this.smtpTransporter = nodemailer.createTransporter({
+    this.smtpTransporter = nodemailer.createTransport({
       host: this.config.smtp.host,
       port: this.config.smtp.port,
-      secure: this.config.smtp.port === 465,
+      secure: this.config.smtp.secure,
       auth: {
         user: this.config.smtp.user,
         pass: this.config.smtp.pass,
@@ -64,8 +64,11 @@ export class MailService {
 
   private initACS(): void {
     if (!this.config.acs) return;
-
-    this.acsClient = new EmailClient(this.config.acs.connectionString);
+    if(this.config.acs.key){
+      this.acsClient = new EmailClient(`endpoint=${this.config.acs.endpoint};accesskey=${this.config.acs.key}`);
+    }else{
+      this.acsClient = new EmailClient(this.config.acs.endpoint, new ClientSecretCredential(process.env.TENANT_ID!, process.env.CLIENT_ID!, process.env.CLIENT_SECRET!));
+    }
   }
 
   private generateEmailContent(notifications: ExpirationNotification[]): { subject: string; html: string; text: string } {
@@ -77,38 +80,12 @@ export class MailService {
 
     const subject = `Azure Secrets Expiration Alert - ${totalApps} application(s) require attention`;
 
-    let html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Azure Secrets Expiration Alert</title>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .header { background-color: #0078d4; color: white; padding: 20px; border-radius: 5px; }
-          .summary { background-color: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
-          .app-block { margin: 20px 0; padding: 15px; border: 1px solid #e0e0e0; border-radius: 5px; }
-          .app-title { font-size: 18px; font-weight: bold; color: #0078d4; margin-bottom: 10px; }
-          .secret-item { margin: 10px 0; padding: 10px; background-color: #f8f9fa; border-radius: 3px; }
-          .expired { background-color: #fff5f5; border-left: 4px solid #dc3545; }
-          .warning { background-color: #fff8e1; border-left: 4px solid #ffc107; }
-          .footer { margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>🔐 Azure Secrets Expiration Alert</h1>
-          <p>Generated on: ${now}</p>
-        </div>
-
-        <div class="summary">
-          <h2>Summary</h2>
-          <ul>
-            <li><strong>Total Applications:</strong> ${totalApps}</li>
-            <li><strong>Applications with Expired Secrets:</strong> ${expiredApps}</li>
-            <li><strong>Applications with Expiring Soon:</strong> ${totalApps - expiredApps}</li>
-          </ul>
-        </div>`;
+    const html = pug.renderFile(this.templatePath, {
+      now,
+      totalApps,
+      expiredApps,
+      notifications
+    });
 
     let text = `AZURE SECRETS EXPIRATION ALERT\n`;
     text += `Generated on: ${now}\n\n`;
@@ -118,26 +95,12 @@ export class MailService {
     text += `- Applications with Expiring Soon: ${totalApps - expiredApps}\n\n`;
 
     notifications.forEach(notification => {
-      html += `
-        <div class="app-block">
-          <div class="app-title">${notification.appName}</div>
-          <p><strong>App ID:</strong> ${notification.appId}</p>`;
-
       text += `APPLICATION: ${notification.appName}\n`;
       text += `App ID: ${notification.appId}\n`;
 
       notification.secrets.forEach(secret => {
-        const cssClass = secret.isExpired ? 'expired' : 'warning';
         const status = secret.isExpired ? '⚠️ EXPIRED' : `⏰ Expires in ${secret.daysUntilExpiration} days`;
         const displayName = secret.displayName || 'Unnamed';
-
-        html += `
-          <div class="secret-item ${cssClass}">
-            <strong>${status}</strong><br>
-            Type: ${secret.type.toUpperCase()}<br>
-            Name: ${displayName}<br>
-            Expiration: ${new Date(secret.endDateTime).toLocaleString()}
-          </div>`;
 
         text += `  - ${status}\n`;
         text += `    Type: ${secret.type.toUpperCase()}\n`;
@@ -145,17 +108,8 @@ export class MailService {
         text += `    Expiration: ${new Date(secret.endDateTime).toLocaleString()}\n`;
       });
 
-      html += `</div>`;
       text += `\n`;
     });
-
-    html += `
-        <div class="footer">
-          <p>This is an automated notification from Azure Secrets Checker.</p>
-          <p>Please take immediate action to renew expired secrets and plan for upcoming expirations.</p>
-        </div>
-      </body>
-      </html>`;
 
     text += `\nThis is an automated notification from Azure Secrets Checker.\n`;
     text += `Please take immediate action to renew expired secrets and plan for upcoming expirations.\n`;
@@ -165,22 +119,24 @@ export class MailService {
 
   async sendNotification(notifications: ExpirationNotification[]): Promise<void> {
     if (notifications.length === 0) {
-      console.log('No notifications to send');
+      fastify.log.info('No notifications to send');
       return;
     }
 
     const { subject, html, text } = this.generateEmailContent(notifications);
 
     try {
-      if (this.config.provider === 'SMTP') {
+      if (this.config.smtp) {
         await this.sendViaSMTP(subject, html, text);
-      } else {
+      } else if(this.config.acs) {
         await this.sendViaACS(subject, html, text);
+      } else{
+        throw new Error('No mail provider configured');
       }
 
-      console.log(`Successfully sent notification email for ${notifications.length} applications`);
-    } catch (error) {
-      console.error('Failed to send notification email:', error);
+      fastify.log.info(`Successfully sent notification email for ${notifications.length} applications`);
+    } catch (error : any) {
+      fastify.log.info('Failed to send notification email:', error);
       throw error;
     }
   }
@@ -204,7 +160,7 @@ export class MailService {
       throw new Error('ACS client not initialized');
     }
 
-    const emailMessage = {
+    const emailMessage : EmailMessage = {
       senderAddress: this.config.from,
       content: {
         subject,
@@ -222,17 +178,17 @@ export class MailService {
 
   async testConnection(): Promise<boolean> {
     try {
-      if (this.config.provider === 'SMTP' && this.smtpTransporter) {
+      if (this.smtpTransporter) {
         await this.smtpTransporter.verify();
-        console.log('SMTP connection test successful');
+        fastify.log.info('SMTP connection test successful');
         return true;
-      } else if (this.config.provider === 'ACS' && this.acsClient) {
-        console.log('ACS client initialized successfully');
+      } else if (this.acsClient) {
+        fastify.log.info('ACS client initialized successfully');
         return true;
       }
       return false;
-    } catch (error) {
-      console.error('Mail service connection test failed:', error);
+    } catch (error : any) {
+      fastify.log.error('Mail service connection test failed:', error);
       return false;
     }
   }

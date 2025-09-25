@@ -47,6 +47,7 @@ export interface ApplicationWithSecrets {
   displayName: string;
   secrets: SecretInfo[];
   certificates: CertificateInfo[];
+  type?: 'servicePrincipal' | 'application';
 }
 
 export interface SecretInfo {
@@ -70,17 +71,18 @@ export interface CertificateInfo {
 }
 
 export interface MailConfig {
-  provider: 'SMTP' | 'ACS';
   to: string;
   from: string;
   smtp?: {
+    secure: boolean;
     host: string;
     port: number;
     user: string;
     pass: string;
   };
   acs?: {
-    connectionString: string;
+    endpoint: string;
+    key?: string;
   };
 }
 
