@@ -1,0 +1,49 @@
+name: 🐳 Docker Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+
+jobs:
+  backend-build:
+    uses: ./.github/workflows/backend-build.yml
+    secrets: inherit
+
+  frontend-build:
+    uses: ./.github/workflows/frontend-build.yml
+    secrets: inherit
+
+  docker-build:
+    needs: [backend-build, frontend-build]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout
+      uses: actions/checkout@v4
+    
+    - name: 📥 Download Backend Build
+      uses: actions/download-artifact@v4
+      with:
+        name: backend-build
+        path: backend/dist
+    
+    - name: 📥 Download Frontend Build
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
+        path: frontend/dist
+    
+    - name: 🔑 Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: 🚀 Build and Push Docker Image
+      run: |
+        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/azure-credential-checker:latest -f Dockerfile .
+        docker tag ${{ secrets.DOCKERHUB_USERNAME }}/azure-credential-checker:latest ${{ secrets.DOCKERHUB_USERNAME }}/azure-credential-checker:${{ github.sha }}
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/azure-credential-checker:latest
+
+        

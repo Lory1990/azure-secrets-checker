@@ -1,0 +1,7 @@
+services:
+  azure-credentials-checker:
+    image: lory1990/azure-credentials-checker:latest
+    container_name: azure-credentials-checker
+    restart: always
+    ports:
+      - '8080:80'
