@@ -31,7 +31,7 @@
     "dotenv": "^16.3.1",
     "fastify": "^5.6.1",
     "fastify-plugin": "^5.0.1",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.6",
     "nodemon": "^3.1.10",
     "pug": "^3.0.3",
